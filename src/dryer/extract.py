@@ -4,7 +4,9 @@ Clojure compares every top-level list except `ns`, matching dry4clj. The other
 languages compare the functions and methods crapper scores: bodies, not
 signatures alone, and not callbacks nested inside another function. Rust
 functions inside `mod tests` are test code and are skipped. Swift also
-compares computed properties, a closure bound at file scope, and deinit.
+compares computed properties, a closure bound at file scope, and deinit. C#
+compares methods with a block or expression body, like Java leaves out
+constructors, and keeps lambdas and local functions inside their method.
 """
 
 from __future__ import annotations
@@ -177,6 +179,14 @@ def _rust_nodes(data: bytes, root) -> list:
     return found
 
 
+def _csharp_nodes(data: bytes, root) -> list:
+    return [
+        node
+        for node in descendants(root)
+        if node.type == "method_declaration" and _has(node, "block", "arrow_expression_clause")
+    ]
+
+
 _PICKERS = {
     "java": ("java", _java_nodes),
     "go": ("go", _go_nodes),
@@ -184,6 +194,7 @@ _PICKERS = {
     "typescript": (_grammar, _typescript_nodes),
     "rust": ("rust", _rust_nodes),
     "swift": ("swift", _swift_nodes),
+    "csharp": ("csharp", _csharp_nodes),
 }
 
 
