@@ -37,6 +37,7 @@ _LITERALS = {
     "string_literal",
     "interpreted_string_literal",
     "raw_string_literal",
+    "verbatim_string_literal",
     "char_literal",
     "rune_literal",
     "character_literal",
@@ -112,6 +113,8 @@ _OPERATORS = {
     "or",
     "not",
     "??",
+    "??=",
+    "..",
     "?.",
     "=",
     ":=",
@@ -125,6 +128,7 @@ _CALLS = {
     "call",
     "call_expression",
     "method_invocation",
+    "invocation_expression",
     "object_creation_expression",
     "new_expression",
 }
@@ -136,6 +140,8 @@ _ATTRIBUTES = {
     "field_access",
     "field_expression",
     "navigation_expression",
+    "member_access_expression",
+    "member_binding_expression",
 }
 
 # The spelling is the structure: Swift spells >= as custom_operator, and an
@@ -149,7 +155,12 @@ _SCOPED = {
     "scoped_type_identifier",
 }
 
+# A generic callee keeps its name: C# `repo.Get<User>(id)` is `Get`.
+_GENERIC = {"generic_type", "generic_name"}
+
 _ARG_LISTS = {"argument_list", "arguments", "call_suffix"}
+# C# `new Dto(a) { Id = b }` and `new Dto { Id = b }`: the initializer follows the type.
+_TRAILING = {"initializer_expression"}
 _TYPE_ARGS = {"type_arguments", "type_parameters"}
 
 _DATA: bytes = b""
@@ -181,8 +192,13 @@ def _named_before_args(node):
     for child in node.named_children:
         if child.type in _ARG_LISTS:
             return incoming, child
-        incoming.append(child)
+        if child.type not in _TRAILING:
+            incoming.append(child)
     return incoming, None
+
+
+def _trailing(node):
+    return [child for child in node.named_children if child.type in _TRAILING]
 
 
 def _without_type_args(nodes):
@@ -241,6 +257,7 @@ def _call_jobs(node):
     jobs.extend((child, "norm", False) for child in type_args)
     if args is not None:
         jobs.append((args, "norm", False))
+    jobs.extend((child, "norm", False) for child in _trailing(node))
     return jobs
 
 
@@ -282,7 +299,7 @@ def _path_jobs(node):
     for child in node.named_children:
         if child.type in _IDENTIFIERS:
             continue
-        if child.type in _SCOPED or child.type == "generic_type":
+        if child.type in _SCOPED or child.type in _GENERIC:
             jobs.append((child, "path", False))
         else:
             jobs.append((child, "norm", False))
@@ -292,7 +309,7 @@ def _path_jobs(node):
 def _callee_jobs(node):
     if node.type in _ATTRIBUTES:
         return _attr_jobs(node, True)
-    if node.type in _SCOPED or node.type == "generic_type":
+    if node.type in _SCOPED or node.type in _GENERIC:
         return _path_jobs(node)
     return [(node, "norm", True)]
 
@@ -338,8 +355,8 @@ def _assemble_call(node, cache):
         norm = cache[(id(child), "norm", False)]
         if norm is not None:
             out.append(norm)
-    if args is not None:
-        norm = cache[(id(args), "norm", False)]
+    for child in ([args] if args is not None else []) + _trailing(node):
+        norm = cache[(id(child), "norm", False)]
         if norm is not None:
             out.append(norm)
     return out
@@ -367,7 +384,7 @@ def _assemble_path(node, cache):
     for child in node.named_children:
         if child.type in _IDENTIFIERS:
             parts.append([K("symbol"), _text(child)])
-        elif child.type in _SCOPED or child.type == "generic_type":
+        elif child.type in _SCOPED or child.type in _GENERIC:
             parts.append(cache[(id(child), "path", False)])
         else:
             norm = cache[(id(child), "norm", False)]
@@ -379,7 +396,7 @@ def _assemble_path(node, cache):
 def _callee_value(node, cache):
     if node.type in _ATTRIBUTES:
         return _assemble_attr(node, True, cache)
-    if node.type in _SCOPED or node.type == "generic_type":
+    if node.type in _SCOPED or node.type in _GENERIC:
         return _assemble_path(node, cache)
     return cache[(id(node), "norm", True)]
 

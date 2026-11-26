@@ -1,8 +1,8 @@
 # dryer
 
-dryer finds candidate duplicate code in Clojure, Java, Go, TypeScript, Rust, Python, and Swift. One run detects the language of each source file, normalizes that language's forms, and reports pairs whose structure is close enough to review.
+dryer finds candidate duplicate code in Clojure, Java, Go, TypeScript, Rust, Python, Swift, and C#. One run detects the language of each source file, normalizes that language's forms, and reports pairs whose structure is close enough to review.
 
-Clojure follows [dry4clj](https://github.com/unclebob/dry4clj). Java, Go, TypeScript, Rust, and Python use the same idea on the functions and methods [crapper](https://github.com/unclebob/crapper) and [mutator](https://github.com/unclebob/mutator) already treat as one unit. Swift uses that same unit. A form is only compared with forms written in the same language.
+Clojure follows [dry4clj](https://github.com/unclebob/dry4clj). Java, Go, TypeScript, Rust, Python, and C# use the same idea on the functions and methods [crapper](https://github.com/unclebob/crapper) and [mutator](https://github.com/unclebob/mutator) already treat as one unit. Swift uses that same unit. A form is only compared with forms written in the same language.
 
 The score is Jaccard similarity of structural fingerprints:
 
@@ -59,6 +59,15 @@ The first run creates `.venv` and installs the tool. From a project root it walk
 - a report on stdout, closest match first
 - `.metrics/dry.edn`, replaced on every successful analysis
 
+On Windows, without a POSIX shell:
+
+```powershell
+python -m venv .venv
+.venv\Scripts\pip install -e .
+cd C:\path\to\solution
+C:\path\to\dryer\.venv\Scripts\dryer.exe
+```
+
 ```bash
 ./dryer src/demo src/ui          # these files and trees
 ./dryer --changed                # git additions and edits
@@ -109,8 +118,11 @@ DUPLICATE score=0.89
 | Rust | functions and methods with a body | functions inside `mod tests`, and closures |
 | Python | functions and methods | functions nested inside another function |
 | Swift | functions and methods with a body, computed properties, and file-level closures | initializers, subscripts, protocol requirements, and closures or functions nested inside another form |
+| C# | methods with a block or `=>` body, including interface default methods | constructors, properties, operators, abstract and interface methods without a body, lambdas and local functions |
 
 A Swift computed property includes a SwiftUI `body`. A method on a struct, class, actor, enum, or extension is a candidate, and so is a deinit and a protocol method that has a default body. A protocol requirement does not. A closure written inside a function stays in that function. A closure bound with `let` or `var` at file scope is its own candidate, as a top-level arrow function is in TypeScript. Argument labels stay, including the label of a trailing closure, because in Swift they are part of the call. `>=`, `!=`, `...`, and `..<` stay. Locals, field names, and literals, including `nil`, do not. An interpolated string keeps the interpolation.
+
+In C#, `repo.GetAsync<User>(id)` keeps `GetAsync`, `new Dto { Id = x.Id }` keeps `Dto` and the shape of its initializer, and `??`, `??=`, `?.`, and `..` stay. `*.Designer.cs`, `*.g.cs`, `Migrations/`, `bin/`, `obj/`, `.vs/`, `.claude/`, and test projects (a directory or file ending in `Test` or `Tests`) are skipped.
 
 Clojure reader conditionals keep the `:clj` branch, as dry4clj does. Syntax-quote is kept as a `syntax-quote` form rather than expanded.
 
